@@ -1,0 +1,12 @@
+<?xml version="1.0"?>
+<launch>
+
+    <arg name="Haptic_publish_freq" default="1000"/>
+
+    <!--node name="joint_state_publisher" pkg="joint_state_publisher" type="joint_state_publisher"/-->
+
+    <node name="haptic_driver_node" pkg="haptic_ros_driver" type="haptic_ros_driver" >
+        <param name="getDataFreq" value="$(arg Haptic_publish_freq)"/>
+    </node>
+
+</launch>
