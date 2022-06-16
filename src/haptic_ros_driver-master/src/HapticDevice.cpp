@@ -123,6 +123,7 @@ void HapticDevice::ForceCallback(const geometry_msgs::Vector3::ConstPtr &data)
     SetForce(data->x, data->y, data->z);
     // std::cout << data->x <<" "<< data->y <<" "<< data->z <<" "<<std::endl;
     // std::cout <<force_[0]  <<" "<< force_[1] <<" "<< force_[2] <<" "<<std::endl;
+    //
 }
 
 void HapticDevice::GetHapticDataRun()

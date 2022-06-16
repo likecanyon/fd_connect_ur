@@ -147,6 +147,7 @@ int main(int argc, char *argv[])
 			// dhdSetForce(TcpForce[0], TcpForce[1], TcpForce[2], -1);
 
 			rtde_control.servoL(TcpPose, 0, 0, 0.005, 0.05, 300);
+
 		}
 		else
 		{
@@ -169,7 +170,7 @@ int main(int argc, char *argv[])
 
 		ros::Duration(0.005).sleep();
 	}
-
+	// process finished.
 	haptic_dev.keep_alive_ = false;
 	spinner.stop();
 
