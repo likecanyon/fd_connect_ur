@@ -33,7 +33,7 @@ int main(int argc, char *argv[])
 	std::vector<double> TcpPoseInit = rtde_receive.getActualTCPPose();
 	std::vector<std::vector<double>> FBuffer(3, std::vector<double>(5, 0.0));
 	std::vector<double> FBufferAve(3, 0.0);
-	std::vector<double> ForceOffset{0.443789,-0.230715,-0.14913};
+	std::vector<double> ForceOffset{0.443789, -0.230715, -0.14913};
 	int button0_state_ = dhdGetButton(0);
 
 	haptic_dev.Start();
@@ -79,9 +79,9 @@ int main(int argc, char *argv[])
 			dhdGetPosition(&current_position[0], &current_position[1], &current_position[2]);
 			dhdGetOrientationFrame(Omega_matrix);
 			TcpForce = rtde_receive.getActualTCPForce();
-			for(int i =0;i<3;i++)
+			for (int i = 0; i < 3; i++)
 			{
-				TcpForce[i]=TcpForce[i]-ForceOffset[i];
+				TcpForce[i] = TcpForce[i] - ForceOffset[i];
 			}
 			FBuffer[0][0] = FBuffer[0][1];
 			FBuffer[0][1] = FBuffer[0][2];
@@ -144,7 +144,7 @@ int main(int argc, char *argv[])
 			{
 				dhdSetForce(FBufferAve[0], FBufferAve[1], FBufferAve[2], -1);
 			}
-			 //dhdSetForce(TcpForce[0], TcpForce[1], TcpForce[2], -1);
+			// dhdSetForce(TcpForce[0], TcpForce[1], TcpForce[2], -1);
 
 			rtde_control.servoL(TcpPose, 0, 0, 0.005, 0.05, 300);
 		}
