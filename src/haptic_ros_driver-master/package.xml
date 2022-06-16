@@ -10,5 +10,6 @@
 
   <buildtool_depend>catkin</buildtool_depend>
   <build_depend>roscpp</build_depend>
+  <build_depend>iir_filters</build_depend>
 
 </package>

@@ -60,6 +60,8 @@ HapticDevice::HapticDevice(ros::NodeHandle &node, bool set_force) : loop_rate_(1
     // enable virtual switch
     dhdEmulateButton(DHD_ON);
 
+    dhdSetForceAndGripperForce(0, 0, 0, 0.0);
+
     device_enabled_ = true;
 }
 

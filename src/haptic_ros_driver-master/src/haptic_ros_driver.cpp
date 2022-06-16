@@ -8,6 +8,7 @@
 #include "haptic_ros_driver/dhdc.h"
 #include <Eigen/Dense>
 #include <cmath>
+#include "iir_filters/Iir.h"
 using namespace ur_rtde;
 using namespace std::chrono;
 
@@ -25,7 +26,7 @@ int main(int argc, char *argv[])
 	RTDEControlInterface rtde_control("192.168.3.101");
 	RTDEReceiveInterface rtde_receive("192.168.3.101");
 
-	HapticDevice haptic_dev(nh, true); //实例化HapticDevice，haptic_dev是一个HapticDevice类的对象
+	HapticDevice haptic_dev(nh, false); //实例化HapticDevice，haptic_dev是一个HapticDevice类的对象
 
 	std::vector<double> joint_q = rtde_receive.getActualQ();
 	std::vector<double> joint_qInit = rtde_receive.getActualQ();
@@ -64,6 +65,22 @@ int main(int argc, char *argv[])
 	Eigen::Vector3d Khat;
 	std::vector<double> TcpForce(6, 0.0);
 
+
+
+	//filter function
+	//
+	// init filter
+	float fx, fy, fz;
+	float scaling = 0.1;
+	Iir::Butterworth::LowPass<2> f1,f2,f3;  // NOTE： here order should replaced by a int number!
+	const float samplingrate = 200; // Hz
+	const float cutoff_frequency = 3; // Hz
+	f1.setup (2, samplingrate, cutoff_frequency); // NOTE： here order should replaced by a int number!
+	f2.setup (2, samplingrate, cutoff_frequency); // NOTE： here order should replaced by a int number!
+	f3.setup (2, samplingrate, cutoff_frequency); // NOTE： here order should replaced by a int number!
+	//
+	//
+
 	Tcp_Rotation_Init.setIdentity();
 
 	double deltaZ = 0;
@@ -83,6 +100,14 @@ int main(int argc, char *argv[])
 			{
 				TcpForce[i] = TcpForce[i] - ForceOffset[i];
 			}
+
+
+			// Realtime filtering sample by sample
+			fx = f1.filter(TcpForce[0])*scaling; 
+			fy = f2.filter(TcpForce[1])*scaling; 
+			fz = f3.filter(TcpForce[2])*scaling; 
+
+
 			FBuffer[0][0] = FBuffer[0][1];
 			FBuffer[0][1] = FBuffer[0][2];
 			FBuffer[0][2] = FBuffer[0][3];
@@ -110,11 +135,11 @@ int main(int argc, char *argv[])
 			{
 				double sum = 0;
 
-				for (int j = 0; j < 10; j++)
+				for (int j = 0; j < 5; j++)
 				{
 					sum = sum + FBuffer[i][j];
 				}
-				sum = sum / 10;
+				sum = sum / 5;
 				FBufferAve[i] = {sum};
 			}
 			// std::cout << "the TcpFore is :" << TcpForce[0] << " " << TcpForce[1] << " " << TcpForce[2] << std::endl;
@@ -140,9 +165,10 @@ int main(int argc, char *argv[])
 			TcpPose[5] = Khat[2] * alpha;
 			//将TcpPose发给机器人，机器人开始运动
 
-			if (FBuffer[0][0] != 0)
+			// if (FBuffer[0][0] != 0)
 			{
-				dhdSetForce(FBufferAve[0], FBufferAve[1], FBufferAve[2], -1);
+				// dhdSetForce(FBufferAve[0], FBufferAve[1], FBufferAve[2], -1);
+				dhdSetForce(fx, fy, fz, -1);
 			}
 			// dhdSetForce(TcpForce[0], TcpForce[1], TcpForce[2], -1);
 
@@ -164,6 +190,7 @@ int main(int argc, char *argv[])
 			axisInit.normalize();
 			alphaInit = TcpPoseInit[3] / axisInit[0];
 			Tcp_Rotation_Init = Eigen::AngleAxisd(alphaInit, axisInit);
+			dhdSetForceAndGripperForce(0, 0, 0, 0.0);
 
 			// std::cout << "current_position_Init is :" << current_position_Init[0] << " " << current_position_Init[1] << " " << current_position_Init[2] << std::endl;
 		}

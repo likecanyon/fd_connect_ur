@@ -7,6 +7,7 @@ find_package(ur_rtde REQUIRED PATHS  "${DIR}/ur_rtde")
 
 find_package(catkin REQUIRED COMPONENTS
   roscpp
+  iir_filters
 )
 
 ###################################
