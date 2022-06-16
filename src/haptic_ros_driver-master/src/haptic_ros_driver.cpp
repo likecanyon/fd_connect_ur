@@ -9,6 +9,7 @@
 #include <Eigen/Dense>
 #include <cmath>
 #include "iir_filters/Iir.h"
+#include <fstream>
 using namespace ur_rtde;
 using namespace std::chrono;
 
@@ -17,6 +18,10 @@ using namespace std::chrono;
  */
 int main(int argc, char *argv[])
 {
+	std::ofstream outfile1;
+	std::ofstream outfile2;
+	outfile1.open("afile1.dat");
+	outfile2.open("afile2.dat");
 
 	ros::init(argc, argv, "haptic_ros_driver");
 
@@ -65,19 +70,17 @@ int main(int argc, char *argv[])
 	Eigen::Vector3d Khat;
 	std::vector<double> TcpForce(6, 0.0);
 
-
-
-	//filter function
+	// filter function
 	//
-	// init filter
+	//  init filter
 	float fx, fy, fz;
 	float scaling = 0.1;
-	Iir::Butterworth::LowPass<2> f1,f2,f3;  // NOTE： here order should replaced by a int number!
-	const float samplingrate = 200; // Hz
-	const float cutoff_frequency = 3; // Hz
-	f1.setup (2, samplingrate, cutoff_frequency); // NOTE： here order should replaced by a int number!
-	f2.setup (2, samplingrate, cutoff_frequency); // NOTE： here order should replaced by a int number!
-	f3.setup (2, samplingrate, cutoff_frequency); // NOTE： here order should replaced by a int number!
+	Iir::Butterworth::LowPass<2> f1, f2, f3;	 // NOTE： here order should replaced by a int number!
+	const float samplingrate = 200;				 // Hz
+	const float cutoff_frequency = 3;			 // Hz
+	f1.setup(2, samplingrate, cutoff_frequency); // NOTE： here order should replaced by a int number!
+	f2.setup(2, samplingrate, cutoff_frequency); // NOTE： here order should replaced by a int number!
+	f3.setup(2, samplingrate, cutoff_frequency); // NOTE： here order should replaced by a int number!
 	//
 	//
 
@@ -100,13 +103,13 @@ int main(int argc, char *argv[])
 			{
 				TcpForce[i] = TcpForce[i] - ForceOffset[i];
 			}
-
+			outfile1 << TcpForce[0] << TcpForce[1] << TcpForce[2] << std::endl;
 
 			// Realtime filtering sample by sample
-			fx = f1.filter(TcpForce[0])*scaling; 
-			fy = f2.filter(TcpForce[1])*scaling; 
-			fz = f3.filter(TcpForce[2])*scaling; 
-
+			fx = f1.filter(TcpForce[0]) * scaling;
+			fy = f2.filter(TcpForce[1]) * scaling;
+			fz = f3.filter(TcpForce[2]) * scaling;
+			outfile2 << fx << fy << fz << std::endl;
 
 			FBuffer[0][0] = FBuffer[0][1];
 			FBuffer[0][1] = FBuffer[0][2];
@@ -173,7 +176,6 @@ int main(int argc, char *argv[])
 			// dhdSetForce(TcpForce[0], TcpForce[1], TcpForce[2], -1);
 
 			rtde_control.servoL(TcpPose, 0, 0, 0.005, 0.05, 300);
-
 		}
 		else
 		{
