@@ -42,6 +42,8 @@ int main(int argc, char *argv[])
 	std::vector<double> ForceOffset{0.443789, -0.230715, -0.14913};
 	int button0_state_ = dhdGetButton(0);
 
+	std::vector<double> InitQ{0.0, -1.57, -1.57, -1.57, 1.57, 0}; // home:0,-90,0,-90,0,0
+	rtde_control.moveJ(InitQ);
 	haptic_dev.Start();
 
 	ros::AsyncSpinner spinner(3);
@@ -103,13 +105,13 @@ int main(int argc, char *argv[])
 			{
 				TcpForce[i] = TcpForce[i] - ForceOffset[i];
 			}
-			outfile1 << TcpForce[0] << TcpForce[1] << TcpForce[2] << std::endl;
+			outfile1 << TcpForce[0] << " " << TcpForce[1] << " " << TcpForce[2] << std::endl;
 
 			// Realtime filtering sample by sample
 			fx = f1.filter(TcpForce[0]) * scaling;
 			fy = f2.filter(TcpForce[1]) * scaling;
 			fz = f3.filter(TcpForce[2]) * scaling;
-			outfile2 << fx << fy << fz << std::endl;
+			outfile2 << fx << " " << fy << " " << fz << std::endl;
 
 			FBuffer[0][0] = FBuffer[0][1];
 			FBuffer[0][1] = FBuffer[0][2];
