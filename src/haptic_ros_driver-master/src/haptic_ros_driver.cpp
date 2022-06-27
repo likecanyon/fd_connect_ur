@@ -33,13 +33,12 @@ int main(int argc, char *argv[])
 
 	HapticDevice haptic_dev(nh, false); //实例化HapticDevice，haptic_dev是一个HapticDevice类的对象
 
-	std::vector<double> joint_q = rtde_receive.getActualQ();
-	std::vector<double> joint_qInit = rtde_receive.getActualQ();
+
 	std::vector<double> TcpPose = rtde_receive.getActualTCPPose();
 	std::vector<double> TcpPoseInit = rtde_receive.getActualTCPPose();
 	std::vector<std::vector<double>> FBuffer(3, std::vector<double>(5, 0.0));
 	std::vector<double> FBufferAve(3, 0.0);
-	std::vector<double> ForceOffset{0.443789, -0.230715, -0.14913};
+	std::vector<double> ForceOffset{-0.237403,-0.0920403,-0.182516};
 	int button0_state_ = dhdGetButton(0);
 
 	std::vector<double> InitQ{0.0, -1.57, -1.57, -1.57, 1.57, 0}; // home:0,-90,0,-90,0,0
@@ -79,7 +78,7 @@ int main(int argc, char *argv[])
 	float scaling = 0.1;
 	Iir::Butterworth::LowPass<2> f1, f2, f3;	 // NOTE： here order should replaced by a int number!
 	const float samplingrate = 200;				 // Hz
-	const float cutoff_frequency = 3;			 // Hz
+	const float cutoff_frequency = 5;			 // Hz
 	f1.setup(2, samplingrate, cutoff_frequency); // NOTE： here order should replaced by a int number!
 	f2.setup(2, samplingrate, cutoff_frequency); // NOTE： here order should replaced by a int number!
 	f3.setup(2, samplingrate, cutoff_frequency); // NOTE： here order should replaced by a int number!
