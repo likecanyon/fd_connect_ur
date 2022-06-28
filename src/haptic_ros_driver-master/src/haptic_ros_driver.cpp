@@ -20,8 +20,12 @@ int main(int argc, char *argv[])
 {
 	std::ofstream outfile1;
 	std::ofstream outfile2;
+	std::ofstream outfile3;
+	std::ofstream outfile4;
 	outfile1.open("afile1.dat");
 	outfile2.open("afile2.dat");
+	outfile3.open("Roboxyz.dat");
+	outfile4.open("Hxyz.dat");
 
 	ros::init(argc, argv, "haptic_ros_driver");
 
@@ -33,14 +37,13 @@ int main(int argc, char *argv[])
 
 	HapticDevice haptic_dev(nh, false); //实例化HapticDevice，haptic_dev是一个HapticDevice类的对象
 
-
 	std::vector<double> TcpPose = rtde_receive.getActualTCPPose();
 	std::vector<double> TcpPoseInit = rtde_receive.getActualTCPPose();
 	std::vector<std::vector<double>> FBuffer(3, std::vector<double>(5, 0.0));
 	std::vector<double> FBufferAve(3, 0.0);
-	std::vector<double> ForceOffset{-0.237403,-0.0920403,-0.182516};
+	// std::vector<double> ForceOffset{2.77322, 0.478383, 0.906154}; //初始位置时读1000次力，求平均值，后面再减去这个值
 	int button0_state_ = dhdGetButton(0);
-
+	double PositonScale = 0.2;
 	std::vector<double> InitQ{0.0, -1.57, -1.57, -1.57, 1.57, 0}; // home:0,-90,0,-90,0,0
 	rtde_control.moveJ(InitQ);
 	haptic_dev.Start();
@@ -70,12 +73,15 @@ int main(int argc, char *argv[])
 	Eigen::AngleAxisd K;
 	Eigen::Vector3d Khat;
 	std::vector<double> TcpForce(6, 0.0);
-
+	rtde_control.zeroFtSensor(); //将力传感器的读数设为0
+	TcpForce = rtde_receive.getActualTCPForce();
+	std::cout << TcpForce[0] << " " << TcpForce[1] << " " << TcpForce[2]
+			  << " " << TcpForce[1] << " " << TcpForce[4] << " " << TcpForce[5] << std::endl;
 	// filter function
 	//
 	//  init filter
 	float fx, fy, fz;
-	float scaling = 0.1;
+	float scaling = 1.0;
 	Iir::Butterworth::LowPass<2> f1, f2, f3;	 // NOTE： here order should replaced by a int number!
 	const float samplingrate = 200;				 // Hz
 	const float cutoff_frequency = 5;			 // Hz
@@ -98,59 +104,26 @@ int main(int argc, char *argv[])
 		{
 			//获得omega的新位姿
 			dhdGetPosition(&current_position[0], &current_position[1], &current_position[2]);
+			outfile4 << current_position[0] << " " << current_position[1] << " " << current_position[2] << std::endl;
 			dhdGetOrientationFrame(Omega_matrix);
 			TcpForce = rtde_receive.getActualTCPForce();
-			for (int i = 0; i < 3; i++)
-			{
-				TcpForce[i] = TcpForce[i] - ForceOffset[i];
-			}
+			// for (int i = 0; i < 3; i++)
+			// {
+			// 	TcpForce[i] = TcpForce[i] - ForceOffset[i];
+			// }
 			outfile1 << TcpForce[0] << " " << TcpForce[1] << " " << TcpForce[2] << std::endl;
-
 			// Realtime filtering sample by sample
 			fx = f1.filter(TcpForce[0]) * scaling;
 			fy = f2.filter(TcpForce[1]) * scaling;
 			fz = f3.filter(TcpForce[2]) * scaling;
 			outfile2 << fx << " " << fy << " " << fz << std::endl;
 
-			FBuffer[0][0] = FBuffer[0][1];
-			FBuffer[0][1] = FBuffer[0][2];
-			FBuffer[0][2] = FBuffer[0][3];
-			FBuffer[0][3] = FBuffer[0][4];
-			// FBuffer[0][4] = FBuffer[0][5];
-			// FBuffer[0][5] = FBuffer[0][6];
-			FBuffer[0][4] = TcpForce[0];
-
-			FBuffer[1][0] = FBuffer[1][1];
-			FBuffer[1][1] = FBuffer[1][2];
-			FBuffer[1][2] = FBuffer[1][3];
-			FBuffer[1][3] = FBuffer[1][4];
-			// FBuffer[1][4] = FBuffer[1][5];
-			// FBuffer[1][5] = FBuffer[1][6];
-			FBuffer[1][4] = TcpForce[1];
-
-			FBuffer[2][0] = FBuffer[2][1];
-			FBuffer[2][1] = FBuffer[2][2];
-			FBuffer[2][2] = FBuffer[2][3];
-			FBuffer[2][3] = FBuffer[2][4];
-			// FBuffer[2][4] = FBuffer[2][5];
-			// FBuffer[2][5] = FBuffer[2][6];
-			FBuffer[2][4] = TcpForce[2];
-			for (int i = 0; i < 3; i++)
-			{
-				double sum = 0;
-
-				for (int j = 0; j < 5; j++)
-				{
-					sum = sum + FBuffer[i][j];
-				}
-				sum = sum / 5;
-				FBufferAve[i] = {sum};
-			}
 			// std::cout << "the TcpFore is :" << TcpForce[0] << " " << TcpForce[1] << " " << TcpForce[2] << std::endl;
 			//计算位移
 			TcpPose[2] = TcpPoseInit[2] + current_position[2] - current_position_Init[2];
 			TcpPose[1] = TcpPoseInit[1] + current_position[1] - current_position_Init[1];
 			TcpPose[0] = TcpPoseInit[0] + current_position[0] - current_position_Init[0];
+			outfile3 << TcpPose[0] << " " << TcpPose[1] << " " << TcpPose[2] << std::endl;
 			//计算姿态
 			//首先计算deltaR，deltaR=omega新位姿*omegaInit位姿的转置
 
@@ -182,6 +155,7 @@ int main(int argc, char *argv[])
 		{
 			//获得Init数据，机器人TCP和主手位姿
 			dhdGetPosition(&current_position_Init[0], &current_position_Init[1], &current_position_Init[2]);
+			outfile4 << current_position_Init[0] << " " << current_position_Init[1] << " " << current_position_Init[2] << std::endl;
 			TcpPoseInit = rtde_receive.getActualTCPPose();
 			dhdGetOrientationFrame(Omega_matrixInit);
 			Omega_matrixInitEigen << Omega_matrixInit[0][0], Omega_matrixInit[0][1], Omega_matrixInit[0][2],
