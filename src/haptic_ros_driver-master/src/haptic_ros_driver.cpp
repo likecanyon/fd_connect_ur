@@ -44,6 +44,7 @@ int main(int argc, char *argv[])
 	// std::vector<double> ForceOffset{2.77322, 0.478383, 0.906154}; //初始位置时读1000次力，求平均值，后面再减去这个值
 	int button0_state_ = dhdGetButton(0);
 	double PositonScale = 0.2;
+	double PoseScale=0.2;
 	std::vector<double> InitQ{0.280435, -2.10401, -1.29935, -1.16459, 1.62875, -0.166486}; // home:0,-90,0,-90,0,00.0, -1.57, -1.57, -1.57, 1.57, 0
 	rtde_control.moveJ(InitQ);
 	haptic_dev.Start();
@@ -138,7 +139,7 @@ int main(int argc, char *argv[])
 			K.fromRotationMatrix(R);
 			Khat = K.axis();
 			alpha = K.angle();
-			R=Eigen::AngleAxisd(alpha*PositonScale,Khat*PositonScale);
+			R=Eigen::AngleAxisd(alpha*PoseScale,Khat);
 			Tcp_Rotation=Tcp_Rotation_Init*R;
 			K.fromRotationMatrix(Tcp_Rotation);
 			Khat = K.axis();
