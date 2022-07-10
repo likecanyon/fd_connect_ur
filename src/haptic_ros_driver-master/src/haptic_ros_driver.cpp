@@ -1,4 +1,6 @@
 #include "ros/ros.h"
+#include "std_msgs/String.h"
+#include <geometry_msgs/Wrench.h>
 
 #include "haptic_ros_driver/HapticDevice.h"
 #include <ur_rtde/rtde_control_interface.h>
@@ -10,6 +12,7 @@
 #include <cmath>
 #include "iir_filters/Iir.h"
 #include <fstream>
+
 using namespace ur_rtde;
 using namespace std::chrono;
 
@@ -37,15 +40,21 @@ int main(int argc, char *argv[])
 
 	HapticDevice haptic_dev(nh, false); //实例化HapticDevice，haptic_dev是一个HapticDevice类的对象
 
+	/**读取力**/
+
+	ros::Publisher FT_pub = nh.advertise<geometry_msgs::Wrench>("URWrench", 200);
+	geometry_msgs::Wrench Wrench_msg;
+	/**********/
+
 	std::vector<double> TcpPose = rtde_receive.getActualTCPPose();
 	std::vector<double> TcpPoseInit = rtde_receive.getActualTCPPose();
 	std::vector<std::vector<double>> FBuffer(3, std::vector<double>(5, 0.0));
 	std::vector<double> FBufferAve(3, 0.0);
 	// std::vector<double> ForceOffset{2.77322, 0.478383, 0.906154}; //初始位置时读1000次力，求平均值，后面再减去这个值
 	int button0_state_ = dhdGetButton(0);
-	double PositonScale = 0.2;
-	double PoseScale=0.2;
-	std::vector<double> InitQ{0.280435, -2.10401, -1.29935, -1.16459, 1.62875, -0.166486}; // home:0,-90,0,-90,0,00.0, -1.57, -1.57, -1.57, 1.57, 0
+	double PositonScale = 1.0;									//位置的scale
+	double PoseScale = 1.0;										//姿态的scale
+	std::vector<double> InitQ{0, -1.57, -1.57, -1.57, 1.57, 0}; // home:0,-90,0,-90,0,00.0, -1.57, -1.57, -1.57, 1.57, 0
 	rtde_control.moveJ(InitQ);
 	haptic_dev.Start();
 
@@ -77,12 +86,13 @@ int main(int argc, char *argv[])
 	std::vector<double> TcpForce(6, 0.0);
 	rtde_control.zeroFtSensor(); //将力传感器的读数设为0
 	TcpForce = rtde_receive.getActualTCPForce();
+
 	std::cout << TcpForce[0] << " " << TcpForce[1] << " " << TcpForce[2]
 			  << " " << TcpForce[1] << " " << TcpForce[4] << " " << TcpForce[5] << std::endl;
 	// filter function
 	//  init filter
 	float fx, fy, fz;
-	float scaling = 1.0;
+	float scaling = 0.1;						 //力的scale
 	Iir::Butterworth::LowPass<2> f1, f2, f3;	 // NOTE： here order should replaced by a int number!
 	const float samplingrate = 200;				 // Hz
 	const float cutoff_frequency = 5;			 // Hz
@@ -112,6 +122,13 @@ int main(int argc, char *argv[])
 			// {
 			// 	TcpForce[i] = TcpForce[i] - ForceOffset[i];
 			// }
+			Wrench_msg.force.x = TcpForce[0];
+			Wrench_msg.force.y = TcpForce[1];
+			Wrench_msg.force.z = TcpForce[2];
+			Wrench_msg.torque.x = TcpForce[3];
+			Wrench_msg.torque.y = TcpForce[4];
+			Wrench_msg.torque.z = TcpForce[5];
+			FT_pub.publish(Wrench_msg);
 			outfile1 << TcpForce[0] << " " << TcpForce[1] << " " << TcpForce[2] << std::endl;
 			// Realtime filtering sample by sample
 			fx = f1.filter(TcpForce[0]) * scaling;
@@ -135,12 +152,12 @@ int main(int argc, char *argv[])
 			DeltaR = Omega_matrixEigen * Omega_matrixInitEigen.transpose();
 			//新的tcp姿态=deltaR*tcpinit姿态,进而得到TcpPose[3],TcpPose[4],TcpPose[5]
 			Tcp_Rotation = DeltaR * Tcp_Rotation_Init;
-			R=Tcp_Rotation_Init.inverse()*Tcp_Rotation;
+			R = Tcp_Rotation_Init.inverse() * Tcp_Rotation;
 			K.fromRotationMatrix(R);
 			Khat = K.axis();
 			alpha = K.angle();
-			R=Eigen::AngleAxisd(alpha*PoseScale,Khat);
-			Tcp_Rotation=Tcp_Rotation_Init*R;
+			R = Eigen::AngleAxisd(alpha * PoseScale, Khat);
+			Tcp_Rotation = Tcp_Rotation_Init * R;
 			K.fromRotationMatrix(Tcp_Rotation);
 			Khat = K.axis();
 			alpha = K.angle();
@@ -150,6 +167,7 @@ int main(int argc, char *argv[])
 			//将TcpPose发给机器人，机器人开始运动
 
 			dhdSetForce(fx, fy, fz, -1);
+			// dhdSetForce(TcpForce[0], TcpForce[1], TcpForce[2], -1);
 
 			rtde_control.servoL(TcpPose, 0, 0, 0.005, 0.05, 300);
 		}
@@ -171,7 +189,15 @@ int main(int argc, char *argv[])
 			alphaInit = TcpPoseInit[3] / axisInit[0];
 			Tcp_Rotation_Init = Eigen::AngleAxisd(alphaInit, axisInit);
 			dhdSetForceAndGripperForce(0, 0, 0, 0.0);
+			TcpForce = rtde_receive.getActualTCPForce();
 
+			Wrench_msg.force.x = TcpForce[0];
+			Wrench_msg.force.y = TcpForce[1];
+			Wrench_msg.force.z = TcpForce[2];
+			Wrench_msg.torque.x = TcpForce[3];
+			Wrench_msg.torque.y = TcpForce[4];
+			Wrench_msg.torque.z = TcpForce[5];
+			FT_pub.publish(Wrench_msg);
 			// std::cout << "current_position_Init is :" << current_position_Init[0] << " " << current_position_Init[1] << " " << current_position_Init[2] << std::endl;
 		}
 
