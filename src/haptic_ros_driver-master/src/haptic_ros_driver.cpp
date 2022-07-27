@@ -12,9 +12,11 @@
 #include <cmath>
 #include "iir_filters/Iir.h"
 #include <fstream>
+#include <ruckig/ruckig.hpp>
 
 using namespace ur_rtde;
 using namespace std::chrono;
+using namespace ruckig;
 
 /**
  * This tutorial demonstrates simple sending of messages over the ROS system.
@@ -42,8 +44,8 @@ int main(int argc, char *argv[])
 
 	/**读取力**/
 
-	ros::Publisher FT_pub = nh.advertise<geometry_msgs::Wrench>("URWrench", 200);
-	geometry_msgs::Wrench Wrench_msg;
+	ros::Publisher FTSource_pub = nh.advertise<geometry_msgs::Wrench>("URWrenchSource", 200);
+	ros::Publisher FTFiltered_pub = nh.advertise<geometry_msgs::Wrench>("URWrenchFiltered", 200);
 	/**********/
 
 	std::vector<double> TcpPose = rtde_receive.getActualTCPPose();
@@ -52,9 +54,10 @@ int main(int argc, char *argv[])
 	std::vector<double> FBufferAve(3, 0.0);
 	// std::vector<double> ForceOffset{2.77322, 0.478383, 0.906154}; //初始位置时读1000次力，求平均值，后面再减去这个值
 	int button0_state_ = dhdGetButton(0);
-	double PositonScale = 1.0;									//位置的scale
-	double PoseScale = 1.0;										//姿态的scale
-	std::vector<double> InitQ{0, -1.57, -1.57, -1.57, 1.57, 0}; // home:0,-90,0,-90,0,00.0, -1.57, -1.57, -1.57, 1.57, 0
+	double PositonScale = 0.1; //位置的scale
+	double PoseScale = 0.3;	   //姿态的scale
+	// std::vector<double> InitQ{0, -1.57, -1.57, -1.57, 1.57, 0}; // home:0,-90,0,-90,0,00.0, -1.57, -1.57, -1.57, 1.57, 0
+	std::vector<double> InitQ{0.309435, -2.16631, -1.72734, -0.829361, 1.56864, 0.0794102};
 	rtde_control.moveJ(InitQ);
 	haptic_dev.Start();
 
@@ -92,7 +95,7 @@ int main(int argc, char *argv[])
 	// filter function
 	//  init filter
 	float fx, fy, fz;
-	float scaling = 0.1;						 //力的scale
+	float scaling = 1;							 //力的scale
 	Iir::Butterworth::LowPass<2> f1, f2, f3;	 // NOTE： here order should replaced by a int number!
 	const float samplingrate = 200;				 // Hz
 	const float cutoff_frequency = 5;			 // Hz
@@ -108,7 +111,8 @@ int main(int argc, char *argv[])
 	bool MotionDir = true;
 	while (ros::ok() && (haptic_dev.keep_alive_ == true))
 	{
-
+		geometry_msgs::Wrench Wrench_msg_Source;
+		geometry_msgs::Wrench Wrench_msg_Filtered;
 		button0_state_ = dhdGetButton(0);
 		if (button0_state_)
 
@@ -118,24 +122,25 @@ int main(int argc, char *argv[])
 			outfile4 << current_position[0] << " " << current_position[1] << " " << current_position[2] << std::endl;
 			dhdGetOrientationFrame(Omega_matrix);
 			TcpForce = rtde_receive.getActualTCPForce();
-			// for (int i = 0; i < 3; i++)
-			// {
-			// 	TcpForce[i] = TcpForce[i] - ForceOffset[i];
-			// }
-			Wrench_msg.force.x = TcpForce[0];
-			Wrench_msg.force.y = TcpForce[1];
-			Wrench_msg.force.z = TcpForce[2];
-			Wrench_msg.torque.x = TcpForce[3];
-			Wrench_msg.torque.y = TcpForce[4];
-			Wrench_msg.torque.z = TcpForce[5];
-			FT_pub.publish(Wrench_msg);
+
+			Wrench_msg_Source.force.x = TcpForce[0];
+			Wrench_msg_Source.force.y = TcpForce[1];
+			Wrench_msg_Source.force.z = TcpForce[2];
+			Wrench_msg_Source.torque.x = TcpForce[3];
+			Wrench_msg_Source.torque.y = TcpForce[4];
+			Wrench_msg_Source.torque.z = TcpForce[5];
+			FTSource_pub.publish(Wrench_msg_Source);
 			outfile1 << TcpForce[0] << " " << TcpForce[1] << " " << TcpForce[2] << std::endl;
 			// Realtime filtering sample by sample
 			fx = f1.filter(TcpForce[0]) * scaling;
 			fy = f2.filter(TcpForce[1]) * scaling;
 			fz = f3.filter(TcpForce[2]) * scaling;
-			outfile2 << fx << " " << fy << " " << fz << std::endl;
 
+			outfile2 << fx << " " << fy << " " << fz << std::endl;
+			Wrench_msg_Filtered.force.x = fx;
+			Wrench_msg_Filtered.force.y = fy;
+			Wrench_msg_Filtered.force.z = fz;
+			FTFiltered_pub.publish(Wrench_msg_Filtered);
 			// std::cout << "the TcpFore is :" << TcpForce[0] << " " << TcpForce[1] << " " << TcpForce[2] << std::endl;
 			//计算位移
 			TcpPose[2] = TcpPoseInit[2] + (current_position[2] - current_position_Init[2]) * PositonScale;
@@ -165,7 +170,36 @@ int main(int argc, char *argv[])
 			TcpPose[4] = Khat[1] * alpha;
 			TcpPose[5] = Khat[2] * alpha;
 			//将TcpPose发给机器人，机器人开始运动
+			// OTG
+			//  Create instances: the Ruckig OTG as well as input and output parameters
+			Ruckig<3> otg{0.01}; // control cycle
+			InputParameter<3> input;
+			OutputParameter<3> output;
 
+			// Set input parameters
+			input.current_position = {0, 0, 0};
+			input.current_velocity = {0.0, 0, 0};
+			input.current_acceleration = {0.0, 0, 0};
+
+			input.target_position = {fx, fy, fz};
+
+			input.target_velocity = {0.0, 0, 0};
+			input.target_acceleration = {0.0, 0.0, 0.5};
+
+			input.max_velocity = {3.0, 1.0, 3.0};
+			input.max_acceleration = {3.0, 2.0, 1.0};
+			input.max_jerk = {4.0, 3.0, 2.0};
+
+			while (otg.update(input, output) == Result::Working)
+			{
+				auto &p = output.new_position;
+				std::cout << output.time << " " << p[0] << " " << p[1] << " " << p[2] << " " << std::endl;
+
+				output.pass_to_input(input);
+
+				input.target_position = {fx, fy, fz};
+			}
+			// OTGend
 			dhdSetForce(fx, fy, fz, -1);
 			// dhdSetForce(TcpForce[0], TcpForce[1], TcpForce[2], -1);
 
@@ -191,13 +225,23 @@ int main(int argc, char *argv[])
 			dhdSetForceAndGripperForce(0, 0, 0, 0.0);
 			TcpForce = rtde_receive.getActualTCPForce();
 
-			Wrench_msg.force.x = TcpForce[0];
-			Wrench_msg.force.y = TcpForce[1];
-			Wrench_msg.force.z = TcpForce[2];
-			Wrench_msg.torque.x = TcpForce[3];
-			Wrench_msg.torque.y = TcpForce[4];
-			Wrench_msg.torque.z = TcpForce[5];
-			FT_pub.publish(Wrench_msg);
+			Wrench_msg_Source.force.x = TcpForce[0];
+			Wrench_msg_Source.force.y = TcpForce[1];
+			Wrench_msg_Source.force.z = TcpForce[2];
+			Wrench_msg_Source.torque.x = TcpForce[3];
+			Wrench_msg_Source.torque.y = TcpForce[4];
+			Wrench_msg_Source.torque.z = TcpForce[5];
+			FTSource_pub.publish(Wrench_msg_Source);
+
+			fx = f1.filter(TcpForce[0]) * scaling;
+			fy = f2.filter(TcpForce[1]) * scaling;
+			fz = f3.filter(TcpForce[2]) * scaling;
+
+			Wrench_msg_Filtered.force.x = fx;
+			Wrench_msg_Filtered.force.y = fy;
+			Wrench_msg_Filtered.force.z = fz;
+			FTFiltered_pub.publish(Wrench_msg_Filtered);
+
 			// std::cout << "current_position_Init is :" << current_position_Init[0] << " " << current_position_Init[1] << " " << current_position_Init[2] << std::endl;
 		}
 
